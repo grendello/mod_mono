@@ -1198,13 +1198,7 @@ do_command (int command, apr_socket_t *sock, request_rec *r, int *result, xsp_da
 			r->status_line = str;
 			break;
 		case DECLINE_REQUEST:
-			/* The backend decided not to service the request. This can happen when the
-			 * backend doesn't have a virtual application configured for the request or
-			 * when the host is null. Returning HTTP_FORBIDDEN here ensures that the
-			 * party sending the request will not be able to just download files from the
-			 * application.
-			 */
-			*result = HTTP_FORBIDDEN;
+			*result = DECLINED;
 			return FALSE;
 		case IS_CONNECTED:
 			*result = (r->connection->aborted ? 0 : 1);
@@ -2475,22 +2469,26 @@ static int
 mono_handler (request_rec *r)
 {
 	module_cfg *config;
+	int retval;
 
-	if (r->handler != NULL && strcasecmp (r->handler, "mono") == 0) {
+	if (r->handler != NULL && !strcmp (r->handler, "mono")) {
 		DEBUG_PRINT (0, "handler: %s", r->handler);
-		return mono_execute_request (r, FALSE);
+		retval = mono_execute_request (r, FALSE);
+
+		return retval;
 	}
 
-	if (!r->content_type || strcasecmp (r->content_type, "application/x-asp-net") != 0)
+	if (!r->content_type || strcmp (r->content_type, "application/x-asp-net"))
 		return DECLINED;
 
 	config = ap_get_module_config (r->server->module_config, &mono_module);
 	if (!config->auto_app)
-		/* We're installed and active, but the request wasn't for a location which had
-		 * SetHandler mono. To keep the asp.net files safe, forbid access to them since
-		 * autohosting is disabled
-		 */
-		return HTTP_FORBIDDEN;
+		return DECLINED;
+
+	/*
+	  if (FALSE == check_file_extension (r->filename))
+	  return DECLINED;
+	*/
 
 	/* Handle on-demand created applications */
 	return mono_execute_request (r, TRUE);
